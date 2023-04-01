@@ -1,7 +1,11 @@
 import { useState } from "react";
 import server from "./server";
 
-function Transfer({ address, setBalance }) {
+import * as secp from "ethereum-cryptography/secp256k1";
+import { keccak256 } from "ethereum-cryptography/keccak";
+import { toHex, utf8ToBytes } from "ethereum-cryptography/utils";
+
+function Transfer({ setBalance, privateKey }) {
   const [sendAmount, setSendAmount] = useState("");
   const [recipient, setRecipient] = useState("");
 
@@ -10,13 +14,21 @@ function Transfer({ address, setBalance }) {
   async function transfer(evt) {
     evt.preventDefault();
 
+    let amount = parseInt(sendAmount);
+    let body = {
+      recipient,
+      amount
+    };
+    let [signature, recovery] = await secp.sign(hashMessage(JSON.stringify(body)), privateKey, { recovered: true });
+    
     try {
       const {
         data: { balance },
       } = await server.post(`send`, {
-        sender: address,
-        amount: parseInt(sendAmount),
         recipient,
+        amount,
+        signature: toHex(signature),
+        recovery,
       });
       setBalance(balance);
     } catch (ex) {
@@ -24,18 +36,13 @@ function Transfer({ address, setBalance }) {
     }
   }
 
+  function hashMessage(message) {
+    return keccak256(utf8ToBytes(message));
+  }
+
   return (
     <form className="container transfer" onSubmit={transfer}>
       <h1>Send Transaction</h1>
-
-      <label>
-        Send Amount
-        <input
-          placeholder="1, 2, 3..."
-          value={sendAmount}
-          onChange={setValue(setSendAmount)}
-        ></input>
-      </label>
 
       <label>
         Recipient
@@ -43,6 +50,15 @@ function Transfer({ address, setBalance }) {
           placeholder="Type an address, for example: 0x2"
           value={recipient}
           onChange={setValue(setRecipient)}
+        ></input>
+      </label>
+
+      <label>
+        Send Amount
+        <input
+          placeholder="1, 2, 3..."
+          value={sendAmount}
+          onChange={setValue(setSendAmount)}
         ></input>
       </label>
 
